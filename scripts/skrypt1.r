@@ -1,7 +1,9 @@
 #zaladowanie bibliotek
 library(tm)
+library(hunspell)
+library(stringr)
 #zmiana katalog roboczego
-wordDir <- "D:\\DD\\TextMinig11S"
+wordDir <- "D:\\Uek\\5 ROK\\2 SEMESTR\\PJN\\DD\\TextMining11S"
 setwd(wordDir)
 
 #definicj katalogÃ³w funkcjynych
@@ -14,10 +16,10 @@ dir.create(workspaceDir, showWarnings = FALSE)
 
 
 #utworzenie korpusu dokumentow
-corpusDiir <- paste(inputDir,"Literatura - streszczenia - oryginal", sep="\\")
+corpusDir <- paste(inputDir,"Literatura - streszczenia - oryginal", sep="\\")
 corpus <- VCorpus(
   DirSource(
-    corpusDiir, 
+    corpusDir, 
     pattern = "*.txt", 
     encoding = "UTF-8"),
   readerControl = list(language="pl_PL"))
@@ -30,6 +32,43 @@ stopListFile <- paste(inputDir,"stopwords_pl.txt", sep="\\")
 stopList <- readLines(stopListFile, encoding = "UTF-8")
 corpus <- tm_map(corpus, removeWords,stopList)
 corpus <- tm_map(corpus, stripWhitespace)
+
+#usuniêcie em dash i 3/4
+removeChar <- content_transformer(function(x,pattern) gsub(pattern, "", x))
+corpus <- tm_map(corpus, removeChar, intToUtf8(8722))
+corpus <- tm_map(corpus, removeChar, intToUtf8(190))
+
+#lematyzacja
+polish <- dictionary(lang="pl_PL")
+lemmatize <- function(text) {
+  simpleText <- str_trim(as.character(text))
+  parsedText <- strsplit(simpleText, split = " ")
+  newTextVec <- hunspell_stem(parsedText[[1]], dict = polish)
+  for (i in 1:length(newTextVec)) {
+    if (length(newTextVec[[i]]) == 0) newTextVec[i] <- parsedText[[1]][i]
+    if (length(newTextVec[[i]]) > 1) newTextVec[i] <- newTextVec[[i]][1]
+  }
+  newText <- paste(newTextVec, collapse = " ")
+  return(newText)
+}
+corpus <- tm_map(corpus, content_transformer(lemmatize))
+
+#usuniêcie rozszerzeñ z nazw plików
+cutExtensions <- function(document){
+  meta(document, "id") <- gsub(pattern = "\\.txt$", replacement = "", meta(document, "id"))
+  return(document)
+}
+corpus <- tm_map(corpus, cutExtensions)
+
+#eksport zawartoœci korpusu do plików tekstowych
+preprocessedDir <- paste(
+  outputDir, 
+  "Literatura - streszczenia - przeworzone",
+  sep = "\\"
+)
+dir.create(preprocessedDir)
+writeCorpus(corpus, path = preprocessedDir)
+
 
 #wyswietlenie zawartosci pojedynczego dokument
 writeLines(as.character(corpus[[1]]))
